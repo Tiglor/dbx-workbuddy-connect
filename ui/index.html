@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WorkBuddy Connect</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: Inter, "PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+        --accent: #6d5dfc;
+        --ok: #16a34a;
+        --warn: #d97706;
+        --err: #dc2626;
+        --line: color-mix(in srgb, CanvasText 14%, transparent);
+        --soft: color-mix(in srgb, CanvasText 6%, transparent);
+        --muted: color-mix(in srgb, CanvasText 62%, transparent);
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 22px; background: Canvas; color: CanvasText; font-size: 13px; line-height: 1.55; }
+      h1 { margin: 0 0 4px; font-size: 17px; display: flex; align-items: center; gap: 8px; }
+      h2 { margin: 0 0 10px; font-size: 12px; letter-spacing: .09em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+      .card { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; background: color-mix(in srgb, Canvas 97%, CanvasText); }
+      .row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; }
+      .row + .row { border-top: 1px solid var(--soft); }
+      .k { color: var(--muted); flex: 0 0 auto; }
+      .v { text-align: right; word-break: break-all; font-variant-numeric: tabular-nums; }
+      .mono { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 12px; }
+      button { border: 1px solid var(--line); border-radius: 8px; padding: 7px 13px; font: inherit; font-weight: 600; cursor: pointer; background: color-mix(in srgb, CanvasText 5%, transparent); color: inherit; }
+      button:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+      button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+      button:disabled { opacity: .5; cursor: not-allowed; }
+      .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+      .badge { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 700; }
+      .badge.on { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+      .badge.off { background: color-mix(in srgb, var(--err) 16%, transparent); color: var(--err); }
+      .badge.idle { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+      .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+      .endpoint { display: flex; gap: 6px; align-items: center; }
+      .endpoint input { flex: 1 1 auto; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; background: var(--soft); color: inherit; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--soft); vertical-align: top; }
+      th { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+      td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+      .muted { color: var(--muted); }
+      .error { border-left: 3px solid var(--err); background: color-mix(in srgb, var(--err) 7%, transparent); padding: 10px 12px; border-radius: 8px; margin-top: 10px; }
+      .hint { border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); padding: 10px 12px; border-radius: 8px; margin-top: 10px; }
+      ol { margin: 8px 0 0; padding-left: 20px; }
+      li { margin: 3px 0; }
+      .spin { display: inline-block; width: 11px; height: 11px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .hide { display: none !important; }
+      code { background: var(--soft); border-radius: 4px; padding: 1px 5px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+      .source { padding: 7px 0; }
+      .source + .source { border-top: 1px solid var(--soft); }
+      .source-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .source-detail { font-size: 12px; margin-top: 2px; }
+      tr.dim td { opacity: .62; }
+    </style>
+  </head>
+  <body>
+    <h1>WorkBuddy Connect <span id="state-badge" class="badge idle"><span class="dot"></span><span id="state-text">…</span></span></h1>
+    <p class="muted" style="margin:0 0 14px" id="subtitle">把本机 WorkBuddy 桌面 App 的模型接入 DBX。</p>
+
+    <div class="card">
+      <h2>登录状态</h2>
+      <div id="auth-rows"><div class="row"><span class="k">读取中…</span></div></div>
+      <div id="auth-error" class="error hide"></div>
+    </div>
+
+    <div class="card">
+      <h2>本地端点</h2>
+      <div id="bridge-stopped">
+        <p class="muted" style="margin:0">端点尚未启动。启动后 DBX 才能读取模型列表。</p>
+      </div>
+      <div id="bridge-running" class="hide">
+        <div class="row" style="display:block">
+          <div class="k" style="margin-bottom:6px">端点地址(填入 DBX 的「端点」)</div>
+          <div class="endpoint">
+            <input id="endpoint" readonly />
+            <button data-copy="endpoint">复制</button>
+          </div>
+        </div>
+        <div class="row" style="display:block;margin-top:10px">
+          <div class="k" style="margin-bottom:6px">API Key(填入 DBX 的「API Key」)</div>
+          <div class="endpoint">
+            <input id="token" readonly type="password" />
+            <button id="reveal">显示</button>
+            <button data-copy="token">复制</button>
+          </div>
+        </div>
+        <div class="hint" id="setup-hint"></div>
+        <div class="hint hide" id="endpoint-notice"></div>
+      </div>
+      <div class="actions">
+        <button id="start" class="primary">启动端点</button>
+        <button id="stop">停止</button>
+        <button id="refresh">刷新状态</button>
+        <button id="open-ai-settings">打开 DBX 的 AI 设置</button>
+        <button id="analyze">让 DBX AI 分析</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>模型来源 <span class="muted" id="source-summary"></span></h2>
+      <div id="sources"><span class="muted">…</span></div>
+    </div>
+
+    <div class="card">
+      <h2>剩余额度</h2>
+      <div id="credits"><span class="muted">…</span></div>
+    </div>
+
+    <div class="card">
+      <h2>可用模型 <span class="muted" id="model-count"></span></h2>
+      <div id="models"><span class="muted">…</span></div>
+    </div>
+
+    <div class="card">
+      <h2>诊断</h2>
+      <div id="diagnostics"><span class="muted">…</span></div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const api = window.dbxPlugin;
+      const state = { bridge: null, auth: null };
+
+      const zh = (api.locale || "en").toLowerCase().startsWith("zh");
+      const L = zh ? {
+        signedIn: "已登录", signedOut: "未登录", running: "运行中", stopped: "已停止",
+        uid: "账号", domain: "域", expires: "有效期至", source: "凭据来源",
+        total: "合计", noModels: "暂无模型", never: "未知",
+        catalogOnlyHint: "该来源的登录令牌不落盘,插件只能读取它的模型清单,无法代理对话",
+        hintTitle: "在 DBX 中接入(一次性):",
+        hint1: "打开 设置 → AI → 新建配置",
+        hint2: "提供者选 OpenAI Compatible",
+        hint3: "端点与 API Key 粘贴上面的值", hint4: "API 风格选 completions,保存后模型会自动出现在下拉里"
+      } : {
+        signedIn: "Signed in", signedOut: "Signed out", running: "Running", stopped: "Stopped",
+        uid: "Account", domain: "Domain", expires: "Valid until", source: "Source",
+        total: "Total", noModels: "No models", never: "unknown",
+        hintTitle: "Connect it in DBX (one time):",
+        hint1: "Open Settings → AI → New configuration",
+        hint2: "Choose provider OpenAI Compatible",
+        hint3: "Paste the endpoint and API key above", hint4: "Set API style to completions; the models appear in the picker after saving"
+      };
+
+      $("setup-hint").innerHTML = `<strong>${L.hintTitle}</strong><ol><li>${L.hint1}</li><li>${L.hint2}</li><li>${L.hint3}</li><li>${L.hint4}</li></ol>`;
+
+      function fmtTime(ms) {
+        if (!ms) return L.never;
+        try { return new Date(ms).toLocaleString(); } catch { return L.never; }
+      }
+      function row(k, v, mono) {
+        return `<div class="row"><span class="k">${k}</span><span class="v${mono ? " mono" : ""}">${v}</span></div>`;
+      }
+      function setBadge(kind, text) {
+        const b = $("state-badge");
+        b.className = "badge " + kind;
+        $("state-text").textContent = text;
+      }
+      function showError(target, message) {
+        const el = $(target);
+        el.textContent = message;
+        el.classList.remove("hide");
+      }
+      function hideError(target) { $(target).classList.add("hide"); }
+
+      // ---- render ----------------------------------------------------------
+      function renderAuth(auth) {
+        if (!auth) return;
+        state.auth = auth;
+        hideError("auth-error");
+        if (auth.state === "signed-in") {
+          $("auth-rows").innerHTML =
+            row(L.uid, auth.uid || "—", true) +
+            row(L.domain, auth.domain || "—", true) +
+            row(L.expires, fmtTime(auth.expiresAtMs)) +
+            row(L.source, auth.source || "—");
+        } else {
+          $("auth-rows").innerHTML = row(L.signedOut, auth.reason || "—");
+          if (auth.reason) showError("auth-error", auth.reason);
+        }
+        const bridgeRunning = state.bridge && state.bridge.running;
+        const kind = auth.state === "signed-in" ? (bridgeRunning ? "on" : "idle") : "off";
+        setBadge(kind, auth.state === "signed-in" ? (bridgeRunning ? L.running : L.stopped) : L.signedOut);
+      }
+
+      function renderBridge(bridge) {
+        state.bridge = bridge || { running: false };
+        if (state.bridge.running) {
+          $("bridge-stopped").classList.add("hide");
+          $("bridge-running").classList.remove("hide");
+          $("endpoint").value = state.bridge.endpoint || "";
+          $("token").value = state.bridge.token || "";
+          if (state.bridge.error) showError("auth-error", state.bridge.error);
+        } else {
+          $("bridge-running").classList.add("hide");
+          $("bridge-stopped").classList.remove("hide");
+        }
+        // The remembered port can be taken; say so, because the address already
+        // configured in DBX is then stale.
+        const notice = $("endpoint-notice");
+        if (state.bridge.warning) {
+          notice.textContent = state.bridge.warning;
+          notice.classList.remove("hide");
+        } else {
+          notice.classList.add("hide");
+        }
+        $("start").disabled = !!state.bridge.running;
+        $("stop").disabled = !state.bridge.running;
+      }
+
+      function renderModels(result) {
+        if (!result || !result.ok) {
+          $("model-count").textContent = "";
+          $("models").innerHTML = `<span class="muted">${(result && result.error) || L.noModels}</span>`;
+          return;
+        }
+        $("model-count").textContent = `(${result.count})`;
+        const rows = result.models.map((m) => {
+          const ctx = m.contextWindow ? Math.round(m.contextWindow / 1000) + "K" : "—";
+          const out = m.maxTokens ? Math.round(m.maxTokens / 1000) + "K" : "—";
+          const tags = [m.supportsImages ? "图像" : "", m.supportsToolCall ? "工具" : "", m.vendor || ""].filter(Boolean).join(" · ");
+          // A source that cannot serve chat is shown, but visibly not selectable
+          // for a real turn, so the list never implies capability it lacks.
+          const dead = callableSources && !callableSources.has(m.source);
+          const sourceCell = dead
+            ? `<span class="badge idle" title="${L.catalogOnlyHint}">${m.source} · 仅清单</span>`
+            : `<span class="badge on">${m.source}</span>`;
+          return `<tr${dead ? ' class="dim"' : ""}><td class="mono">${m.id}</td><td>${sourceCell}</td><td class="num">${ctx}</td><td class="num">${out}</td><td class="muted">${tags}</td></tr>`;
+        }).join("");
+        $("models").innerHTML = `<table><thead><tr><th>模型</th><th>来源</th><th>上下文</th><th>输出</th><th>能力</th></tr></thead><tbody>${rows}</tbody></table>`;
+      }
+
+      // ---- sources ---------------------------------------------------------
+      let callableSources = null;
+
+      function renderSources(result) {
+        if (!result || !result.ok || !Array.isArray(result.sources)) {
+          $("sources").innerHTML = `<span class="muted">—</span>`;
+          $("source-summary").textContent = "";
+          return;
+        }
+        callableSources = new Set(result.sources.filter((s) => s.callable).map((s) => s.id));
+        const ready = result.sources.filter((s) => s.callable).length;
+        $("source-summary").textContent = `${ready}/${result.sources.length} 可调用`;
+
+        $("sources").innerHTML = result.sources.map((s) => {
+          const kind = s.callable ? "on" : (s.installed ? "idle" : "off");
+          const label = s.callable ? "可调用" : (s.installed ? "仅清单" : "未安装");
+          const count = s.modelCount != null ? `${s.modelCount} 个模型` : "清单不可读";
+          return `<div class="source">
+            <div class="source-head"><strong>${s.name}</strong> <span class="badge ${kind}">${label}</span> <span class="muted">${count}</span></div>
+            ${s.detail ? `<div class="muted source-detail">${s.detail}</div>` : ""}
+            ${s.appPath ? `<div class="muted source-detail mono">${s.appPath}</div>` : ""}
+          </div>`;
+        }).join("");
+      }
+
+      function renderCredits(result) {
+        if (!result || !result.ok) {
+          $("credits").innerHTML = `<span class="muted">${(result && result.error) || "—"}</span>`;
+          return;
+        }
+        // The sidecar already flattens this: total at the top level, accounts
+        // reduced to the packages that still hold credit.
+        let html = result.total != null ? row(L.total, String(result.total)) : "";
+        const list = Array.isArray(result.accounts) ? result.accounts : [];
+        if (list.length) {
+          const rows = list.map((p) => {
+            const end = p.endTimeMs ? new Date(p.endTimeMs).toLocaleDateString() : "—";
+            return `<tr><td>${p.packageName || "—"}</td><td class="num">${p.remain}/${p.size}</td><td class="num muted">${end}</td></tr>`;
+          }).join("");
+          html += `<table style="margin-top:8px"><thead><tr><th>套餐</th><th>剩余</th><th>到期</th></tr></thead><tbody>${rows}</tbody></table>`;
+        }
+        const expiry = result.expiry || {};
+        if (expiry.within7dTotal) {
+          html += `<div class="hint">7 天内到期 ${expiry.within7dTotal} 点${expiry.within7dEarliestEndMs ? "(" + new Date(expiry.within7dEarliestEndMs).toLocaleDateString() + " 起)" : ""}</div>`;
+        }
+        $("credits").innerHTML = html || `<span class="muted">—</span>`;
+      }
+
+      function renderDiagnostics(result) {
+        if (!result) { $("diagnostics").innerHTML = `<span class="muted">—</span>`; return; }
+        let html =
+          row("凭据文件", result.desktopAuthPath || "—", true) +
+          row("凭据格式", result.authFormat || "—", true) +
+          row("WorkBuddy 程序", result.electronPath || "—", true) +
+          row("环境变量覆盖", result.electronOverride ? "是" : "否");
+        if (result.authError) html += row("凭据错误", result.authError);
+        if (result.electronError) html += row("程序错误", result.electronError);
+        html += `<div class="hint">若 WorkBuddy 程序一栏为空,把它的可执行文件路径写进环境变量 <code>${result.electronEnvVar || "WORKBUDDY_ELECTRON_BIN"}</code> 后重启 DBX。</div>`;
+        $("diagnostics").innerHTML = html;
+      }
+
+      // ---- data loading ----------------------------------------------------
+      async function invoke(method, params) {
+        return await api.invoke(method, params || {});
+      }
+
+      // The backend memoises the catalog for a few seconds, because reading
+      // every source touches other applications' databases and parses a large
+      // JSON document. An explicit refresh asks it to re-read.
+      async function loadAll(force) {
+        const opts = force ? { refresh: true } : {};
+
+        // Everything below is independent, so run it concurrently: the previous
+        // version awaited the source list before even asking for models, which
+        // doubled the perceived load time.
+        const [status, sources, models, credits, diagnostics] = await Promise.all([
+          invoke("status").catch((e) => ({ ok: false, error: String(e.message || e) })),
+          invoke("sources", opts).catch(() => null),
+          invoke("models", opts).catch((e) => ({ ok: false, error: String(e.message || e) })),
+          invoke("credits").catch(() => null),
+          invoke("diagnostics").catch(() => null),
+        ]);
+
+        if (status && status.ok) {
+          renderAuth(status.auth);
+          renderBridge(status.bridge);
+        } else if (status) {
+          showError("auth-error", status.error || "status failed");
+          setBadge("off", "错误");
+        }
+
+        // Render sources first: the model table labels each row with whether
+        // its source can actually serve a turn.
+        renderSources(sources);
+        renderModels(models);
+        renderCredits(credits);
+        renderDiagnostics(diagnostics);
+      }
+
+      // ---- interactions ----------------------------------------------------
+      $("start").addEventListener("click", async () => {
+        $("start").disabled = true;
+        try {
+          const result = await invoke("bridge.start");
+          if (result && result.ok) {
+            renderBridge(result.bridge);
+            renderAuth(state.auth);
+          } else {
+            renderBridge({ running: false });
+            showError("auth-error", (result && result.error) || "启动失败");
+          }
+        } catch (error) {
+          showError("auth-error", String(error.message || error));
+        } finally {
+          $("start").disabled = !!(state.bridge && state.bridge.running);
+        }
+      });
+
+      $("stop").addEventListener("click", async () => {
+        try {
+          await invoke("bridge.stop");
+          renderBridge({ running: false });
+          renderAuth(state.auth);
+        } catch (error) {
+          showError("auth-error", String(error.message || error));
+        }
+      });
+
+      $("refresh").addEventListener("click", async () => {
+        const button = $("refresh");
+        button.disabled = true;
+        try {
+          await loadAll(true);
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      // Deep link that DBX itself registers: opens the AI configuration page.
+      // A plugin cannot write DBX's settings (no host API exists for it), so
+      // this is the closest thing to "fill it in for me" that is legitimate.
+      $("open-ai-settings").addEventListener("click", async () => {
+        try {
+          window.open("dbx://settings/ai/new", "_blank", "noopener");
+        } catch (error) {
+          showError("auth-error", "无法唤起 DBX 设置页,请手动打开:设置 → AI → 新建配置。");
+        }
+      });
+
+      $("reveal").addEventListener("click", () => {
+        const input = $("token");
+        const hidden = input.type === "password";
+        input.type = hidden ? "text" : "password";
+        $("reveal").textContent = hidden ? "隐藏" : "显示";
+      });
+
+      document.querySelectorAll("[data-copy]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const input = $(button.dataset.copy);
+          const original = button.textContent;
+          const done = () => {
+            button.textContent = "已复制";
+            setTimeout(() => { button.textContent = original; }, 1200);
+          };
+          try {
+            await navigator.clipboard.writeText(input.value);
+            done();
+          } catch {
+            // Clipboard access can be denied in a sandboxed frame; fall back to
+            // selecting the field so the user can copy it themselves.
+            try {
+              input.type = "text";
+              input.select();
+              document.execCommand("copy");
+              done();
+            } catch {
+              button.textContent = "请手动复制";
+              setTimeout(() => { button.textContent = original; }, 1800);
+            }
+          }
+        });
+      });
+
+      // Hands the catalog to DBX's own AI panel as a data snapshot.
+      $("analyze").addEventListener("click", async () => {
+        try {
+          if (!api.capabilities || !api.capabilities.ai) {
+            showError("auth-error", "当前 DBX 版本不支持插件 AI 对话(host.ai)。");
+            return;
+          }
+          const [models, credits, sources] = await Promise.all([
+            invoke("models"), invoke("credits"), invoke("sources"),
+          ]);
+          await api.ai.openConversation({
+            title: "WorkBuddy / Qoder / Trae 模型与额度",
+            prompt: "总结这些模型的差异与适用场景,说明哪些来源当前可调用、哪些只能读取清单,并指出额度中即将到期的部分。数据是快照,不要臆测实时值。",
+            context: {
+              capturedAt: new Date().toISOString(),
+              auth: state.auth,
+              sources: sources && sources.ok ? sources.sources : sources,
+              models: models && models.ok ? models.models : models,
+              credits: credits && credits.ok ? credits.accounts : credits
+            },
+            send: true
+          });
+        } catch (error) {
+          showError("auth-error", String(error.message || error));
+        }
+      });
+
+      // ---- boot ------------------------------------------------------------
+      if (!api) {
+        showError("auth-error", "此页面必须由 DBX 插件宿主打开。");
+      } else {
+        api.ready.then(() => loadAll(false)).catch((error) => {
+          showError("auth-error", "插件宿主初始化失败:" + String(error.message || error));
+        });
+      }
+    </script>
+  </body>
+</html>

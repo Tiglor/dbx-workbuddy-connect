@@ -1,0 +1,11 @@
+/dist/
+/.dbx-dev/
+.dbx-repository-signing-key.env
+.DS_Store
+*.log
+
+# Go build output must never be committed: the packager builds the sidecar
+# from source, and a stale binary in the repository would silently ship.
+/backend/*.exe
+/backend/*.exe~
+/backend/dbx-workbuddy-connect

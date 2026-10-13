@@ -1,0 +1,16 @@
+WorkBuddy Connect
+Copyright 2026 workbuddy-community
+
+This product includes software developed by third parties.
+
+--------------------------------------------------------------------------------
+dsh-workbuddy-connect (https://github.com/corrinehu/dsh-workbuddy-connect)
+Licensed under the MIT License.
+
+The WorkBuddy at-rest credential envelope format (AES-256-GCM with the
+"WB-AAD" authenticated-context framing, the SHA-256 protector-key derivation,
+and the key-id convention) and the upstream gateway protocol details
+(endpoints, header sets, request bodies, catalog membership rules and the
+billing document shape) were derived from that project's implementation and
+from live traffic of the WorkBuddy desktop application. The Go implementation
+in this repository is an independent port; no source code was copied verbatim.

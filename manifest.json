@@ -1,0 +1,48 @@
+{
+  "$schema": "https://raw.githubusercontent.com/t8y2/dbx/plugin-sdk-v1/plugins/manifest.schema.json",
+  "manifest_version": 1,
+  "id": "io.github.workbuddy.connect",
+  "name": "WorkBuddy Connect",
+  "version": "0.1.0",
+  "publisher": "workbuddy-community",
+  "description": "Bring the WorkBuddy desktop app's models into DBX: reuse the app's local sign-in, show the live model catalog and remaining credit, and serve an OpenAI-compatible endpoint for DBX's AI settings.",
+  "icon": "assets/plugin.svg",
+  "source": "https://github.com/chenrixiao/dbx-workbuddy-connect",
+  "homepage": "https://github.com/chenrixiao/dbx-workbuddy-connect",
+  "engines": {
+    "dbx": ">=0.5.68",
+    "host_api": "1"
+  },
+  "entrypoints": {
+    "backend": {
+      "protocol_versions": [1],
+      "transport": "stdio-jsonl",
+      "executable": "bin/dbx-plugin-dbx-workbuddy-connect"
+    },
+    "ui": {
+      "root": "ui",
+      "entry": "ui/index.html"
+    }
+  },
+  "contributions": [
+    {
+      "type": "workbench",
+      "id": "io.github.workbuddy.connect.workbench",
+      "label": "WorkBuddy Connect",
+      "description": "Sign-in status, model catalog, remaining credit and the local endpoint DBX should use.",
+      "icon": "assets/plugin.svg"
+    }
+  ],
+  "localizations": {
+    "zh-CN": {
+      "name": "WorkBuddy Connect",
+      "description": "把本机 WorkBuddy 桌面 App 的模型接入 DBX:复用它的本地登录态,显示实时模型目录与剩余额度,并提供一个可供 DBX AI 设置使用的 OpenAI 兼容端点。",
+      "contributions": {
+        "io.github.workbuddy.connect.workbench": {
+          "label": "WorkBuddy Connect",
+          "description": "显示登录状态、模型目录、剩余额度,以及应填入 DBX 的本地端点。"
+        }
+      }
+    }
+  }
+}
