@@ -4,11 +4,11 @@
   "id": "io.github.workbuddy.connect",
   "name": "WorkBuddy Connect",
   "version": "0.1.0",
-  "publisher": "workbuddy-community",
+  "publisher": "tiglor",
   "description": "Bring the WorkBuddy desktop app's models into DBX: reuse the app's local sign-in, show the live model catalog and remaining credit, and serve an OpenAI-compatible endpoint for DBX's AI settings.",
   "icon": "assets/plugin.svg",
-  "source": "https://github.com/chenrixiao/dbx-workbuddy-connect",
-  "homepage": "https://github.com/chenrixiao/dbx-workbuddy-connect",
+  "source": "https://github.com/tiglor/dbx-workbuddy-connect",
+  "homepage": "https://github.com/tiglor/dbx-workbuddy-connect",
   "engines": {
     "dbx": ">=0.5.68",
     "host_api": "1"

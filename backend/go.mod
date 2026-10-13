@@ -1,4 +1,4 @@
-module github.com/workbuddy-community/dbx-workbuddy-connect
+module github.com/tiglor/dbx-workbuddy-connect
 
 go 1.26.0
 
