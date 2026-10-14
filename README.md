@@ -94,6 +94,23 @@ POST /v1/chat/completions ◄───┘  loopback 端点(仅 127.0.0.1,需 Bea
 - **读取 WorkBuddy 加密凭据需要运行一次它自身的可执行文件**(用它的私有 `electron_browser_workbuddy_storage` 绑定取 at-rest 密钥)。这是该凭据设计的唯一解。
 - 本插件**不会修改**任何被代理应用的文件,也不会改动 DBX 的配置。
 
+### 凭证归属与共用
+
+**每个来源代理的都是"使用者自己"的凭证,插件里没有任何内置或共享的账号。**
+
+| 来源 | 凭证从哪来 | 归属 |
+| --- | --- | --- |
+| WorkBuddy | 读**本机**桌面 App 落盘的加密凭据 | 本机登录的账号 |
+| Qoder | 使用者在浏览器跑设备授权登录 | 登录者本人账号 |
+| Trae | 使用者在浏览器跑回环 OAuth 授权 | 登录者本人账号 |
+| 豆包 | 解**本机** Chromium cookie 库 | 本机登录的账号 |
+
+拿到的令牌只存在**本机**插件数据目录(`%LOCALAPPDATA%\dbx-plugins\io.github.workbuddy.connect\`,0600),回环端点也只转发给这台机器已登录的账号。**不存在跨人共享的凭证池。**
+
+- **分发 `.dbxp` 插件包给同事 → 可以。** 包里只有代码,不含你的 token;同事装上后各自登录各自账号,各用各的额度。
+- **共享你的个人凭证 → 不要。** 那需要手动把数据目录里的 `*-token.json` 拷给别人,等于泄露 Bearer 令牌、违反各应用服务条款;Trae 还会因服务端按账号绑定/限制设备数而触发风控。
+- 建议只在**内网点对点**分发,不要公开大范围传播(这些是对厂商私有网关的逆向代理)。
+
 ## 已知限制
 
 - DBX 没有给插件提供「注册模型供应商」的接口,所以**必须手工做一次上面的 AI 配置**。这是宿主能力边界,不是插件缺陷。
@@ -122,11 +139,23 @@ dbx-plugin package .
 
 SDK 已 vendor 到 `backend/dbx-plugin-sdk/`,`go.mod` 用相对路径引用,克隆即可构建。SQLite 读取使用纯 Go 驱动(`modernc.org/sqlite`),因此不需要 CGO、可从一台机器交叉编译到全部 DBX 目标平台。
 
+### 仓库卫生
+
+构建产物与本机/IDE 配置一律不入库,已在 `.gitignore` 里排除:
+
+- `dist/`(打包出的 `.dbxp` 与 artifact 元数据,均可由源码重新构建)。
+- `backend/*.exe`、`backend/dbx-workbuddy-connect`(sidecar 编译产物;打包器从源码现编,仓库里放旧二进制会被误打进包)。
+- `.dbx-dev/`(`dbx-plugin dev` 开发宿主的本机缓存)。
+- `.idea/`、`.vscode/`、`*.iml`(逐人逐机的 IDE 配置)。
+- `.dbx-repository-signing-key.env`(签名密钥,绝不能提交)。
+
+贡献时 `git status` 应只出现源码/文档改动;若冒出上面这些,说明忽略规则被改坏了。
+
 ## 免责声明
 
-仅供个人学习研究,仅驱动使用者**自己的**账号在本机调用。请遵守各应用的服务条款。本项目与 WorkBuddy/腾讯、Qoder/阿里云、Trae/字节跳动均无关联。
+仅供个人学习研究,仅驱动使用者**自己的**账号在本机调用。请遵守各应用的服务条款。本项目与 WorkBuddy/腾讯、Qoder/阿里云、Trae/字节跳动、豆包/字节跳动均无关联。
 
-本项目的 WorkBuddy 加密实现与上游协议细节参考了 [`dsh-workbuddy-connect`](https://github.com/corrinehu/dsh-workbuddy-connect)(MIT),在此致谢。
+本项目的 WorkBuddy 加密实现与上游协议细节参考了 [`dsh-workbuddy-connect`](https://github.com/corrinehu/dsh-workbuddy-connect)(MIT);Qoder 与 Trae 的协议常量与算法移植自 [`mmqz/cpa-multi-plugins`](https://github.com/mmqz/cpa-multi-plugins)(© 2026 Sliverkiss/mmqz,MIT),均为独立移植、未逐行复制。完整署名见 [NOTICE](NOTICE)。
 
 ## 许可
 
