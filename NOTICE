@@ -14,3 +14,39 @@ and the key-id convention) and the upstream gateway protocol details
 billing document shape) were derived from that project's implementation and
 from live traffic of the WorkBuddy desktop application. The Go implementation
 in this repository is an independent port; no source code was copied verbatim.
+
+--------------------------------------------------------------------------------
+cpa-multi-plugins (https://github.com/mmqz/cpa-multi-plugins)
+Copyright 2026 Sliverkiss / mmqz. Licensed under the MIT License.
+
+The Qoder source (backend/qoder_cosy.go, backend/qoder_auth.go,
+backend/source_qoder.go) and the Trae source (backend/trae_auth.go,
+backend/source_trae.go) reproduce protocol details derived from that project:
+
+  - Qoder: the device-authorization OAuth flow (client_id, selectAccounts /
+    deviceToken poll+refresh endpoints, PKCE-S256 construction), the COSY
+    request-signing algorithm (RSA-wrapped AES session key, AES-128-CBC identity
+    seal, MD5 request signature and its exact header set), the QoderEncoding
+    custom-base64 body encoding, the gateway chat/model endpoints, and the
+    nested SSE envelope shape.
+  - Trae: the CN realm constants (agent host, client id, app id, ide version /
+    version code), the loopback `/authorize` OAuth callback flow, the
+    ExchangeToken request/response shape, the ECDSA device-key requirement, the
+    get_detail_param catalog shape, and the llm_utils_chat request body plus its
+    event-stream (event:output / token_usage / done) to OpenAI-SSE translation.
+
+The Go implementation in this repository is an independent port; no source code
+was copied verbatim.
+
+--------------------------------------------------------------------------------
+Chromium os_crypt cookie decryption (widely documented technique)
+
+The Doubao source (backend/doubao_cookies.go, backend/doubao_dpapi_windows.go)
+implements the standard Chromium-on-Windows cookie recovery used by many
+open-source cookie readers: base64 `os_crypt.encrypted_key` from `Local State`
+with a "DPAPI" prefix, unwrapped via CryptUnprotectData (CurrentUser) to a
+32-byte AES key, then `v10`-framed cookie values decrypted as
+nonce(12) | ciphertext | tag(16) with AES-256-GCM, skipping the 32-byte fixed
+header. This is an independent implementation of a public technique; no third
+party's source code was copied.
+

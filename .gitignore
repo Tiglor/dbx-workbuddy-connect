@@ -9,3 +9,12 @@
 /backend/*.exe
 /backend/*.exe~
 /backend/dbx-workbuddy-connect
+
+# IDE / editor settings are per-developer and per-machine, not part of the
+# plugin source.
+/.idea/
+/.vscode/
+*.iml
+
+# Local OS metadata.
+Thumbs.db

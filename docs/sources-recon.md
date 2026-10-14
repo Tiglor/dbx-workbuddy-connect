@@ -141,7 +141,26 @@ odin_tt / multi_sids / passport_csrf_token = 可读
 
 ## 对插件的含义
 
-- `workbuddy` 来源:完整实现,18 个模型可对话。
-- `qoder` / `trae` 来源:只读清单,对话请求返回 `501` 与明确原因(不是静默失败)。
-- `doubao` 来源:未实现;凭据层技术已验证,瓶颈在请求签名层。
+- `workbuddy` 来源:完整实现,读取桌面凭据后可对话。
+- `qoder` 来源:**已实现设备授权登录 + COSY 签名对话**。令牌不落盘,通过工作台
+  「登录 Qoder」跑官方设备授权(PKCE-S256 + deviceToken poll/refresh),登录后
+  实时读取网关模型清单并代理对话(嵌套 SSE 信封翻译成 OpenAI SSE)。
+- `trae` 来源:**已实现 OAuth 登录 + Cloud-IDE-JWT 对话**。插件在
+  `127.0.0.1:<port>/authorize` 起本地回环监听(授权页硬性要求该回调形态),
+  用户浏览器授权后拿 auth code 换 JWT;生成并持久化 ECDSA 设备密钥对
+  (ExchangeToken 要求非空 DevicePublicKey,且服务端按账号绑定/限制设备数)。
+  对话走 `llm_utils_chat`,事件流翻译成 OpenAI SSE。刷新走 legacy 无签名路径。
+- `doubao` 来源:**凭据层已实现(可读到登录账号),对话仍拒绝**。cookie 通过
+  Chromium DPAPI + AES-256-GCM 解出;但对话接口需 `a_bogus`/`X-Bogus`/`msToken`
+  风控签名(混淆 JS 生成、随版本变动),尚未复现;且自 2026-07 起字节跳动对
+  未签名高频 Web 请求会静默封 IP,因此 `SendChat` 明确拒绝而非冒险发送。
 - 所有对他人数据库的读取都以**只读 + `query_only`** 打开,不写入、不加锁、不迁移。
+- 协议常量与算法移植自 MIT 许可的 `mmqz/cpa-multi-plugins`(© 2026 Sliverkiss/mmqz),
+  为独立移植、未逐行复制,署名见 `NOTICE`。
+
+### 验证边界(诚实说明)
+
+- Qoder / Trae / Doubao 三处均已通过 `go build` 与 `go vet`。
+- Qoder / Trae 的**实际对话**需要用户在浏览器完成一次真实登录后才能端到端验证;
+  本仓库只做了编译与自检层面的验证,未用真实账号跑通网关。
+- Doubao 的对话路径**未实现**(见上),不是"待验证",而是有意拒绝。
