@@ -104,6 +104,7 @@
     <div class="card">
       <h2>模型来源 <span class="muted" id="source-summary"></span></h2>
       <div id="sources"><span class="muted">…</span></div>
+      <div id="login-box" class="hint hide" style="margin-top:10px"></div>
     </div>
 
     <div class="card">
@@ -251,8 +252,17 @@
           const kind = s.callable ? "on" : (s.installed ? "idle" : "off");
           const label = s.callable ? "可调用" : (s.installed ? "仅清单" : "未安装");
           const count = s.modelCount != null ? `${s.modelCount} 个模型` : "清单不可读";
+          // Qoder and Trae sign in through the workbench; Doubao has no login
+          // (its cookie is read straight from disk) and stays catalog-only.
+          const loginable = s.id === "qoder" || s.id === "trae";
+          let action = "";
+          if (loginable) {
+            action = s.state === "signed-in"
+              ? `<button data-logout="${s.id}" style="margin-left:auto">退出登录</button>`
+              : `<button data-login="${s.id}" class="primary" style="margin-left:auto">登录</button>`;
+          }
           return `<div class="source">
-            <div class="source-head"><strong>${s.name}</strong> <span class="badge ${kind}">${label}</span> <span class="muted">${count}</span></div>
+            <div class="source-head"><strong>${s.name}</strong> <span class="badge ${kind}">${label}</span> <span class="muted">${count}</span>${action}</div>
             ${s.detail ? `<div class="muted source-detail">${s.detail}</div>` : ""}
             ${s.appPath ? `<div class="muted source-detail mono">${s.appPath}</div>` : ""}
           </div>`;
@@ -442,6 +452,89 @@
         } catch (error) {
           showError("auth-error", String(error.message || error));
         }
+      });
+
+      // ---- source login (Qoder device flow / Trae loopback OAuth) ----------
+      const sourceName = { qoder: "Qoder", trae: "Trae" };
+      let loginTimer = null;
+
+      function stopLoginPoll() {
+        if (loginTimer) { clearInterval(loginTimer); loginTimer = null; }
+      }
+
+      function loginBox(html) {
+        const box = $("login-box");
+        box.classList.remove("hide");
+        box.innerHTML = html;
+        return box;
+      }
+
+      async function startLogin(source) {
+        stopLoginPoll();
+        const name = sourceName[source] || source;
+        loginBox(`<span class="spin"></span> 正在为 ${name} 生成登录链接…`);
+        let result;
+        try {
+          result = await invoke("login.start", { source });
+        } catch (error) {
+          loginBox(`<span style="color:var(--err)">登录启动失败：${String(error.message || error)}</span>`);
+          return;
+        }
+        const box = loginBox(
+          `<div>已尝试打开浏览器完成 ${name} 授权。若未自动打开，请手动复制下面的链接到浏览器：</div>` +
+          `<div class="endpoint" style="margin-top:6px"><input id="login-url" readonly /><button id="login-copy">复制</button></div>` +
+          `<div class="muted" style="margin-top:6px" id="login-status"><span class="spin"></span> 等待授权完成…</div>`
+        );
+        // Set the value programmatically: the URL contains & and quotes that
+        // would break if interpolated into the value attribute.
+        box.querySelector("#login-url").value = result.authUrl || "";
+        box.querySelector("#login-copy").addEventListener("click", async () => {
+          try { await navigator.clipboard.writeText(result.authUrl || ""); }
+          catch { box.querySelector("#login-url").select(); }
+        });
+        try { window.open(result.authUrl, "_blank", "noopener"); } catch {}
+        pollLogin(source, result.state);
+      }
+
+      function pollLogin(source, stateToken) {
+        const name = sourceName[source] || source;
+        loginTimer = setInterval(async () => {
+          let result;
+          try {
+            result = await invoke("login.poll", { source, state: stateToken });
+          } catch (error) {
+            stopLoginPoll();
+            const st = $("login-status");
+            if (st) st.innerHTML = `<span style="color:var(--err)">登录失败：${String(error.message || error)}</span>`;
+            return;
+          }
+          if (result && result.pending) return;
+          stopLoginPoll();
+          const who = result.nickname || result.uid || "";
+          const st = $("login-status");
+          if (st) st.innerHTML = `✅ ${name} 登录成功${who ? "（" + who + "）" : ""}`;
+          await loadAll(true);
+          setTimeout(() => $("login-box").classList.add("hide"), 2600);
+        }, 2000);
+      }
+
+      async function logout(source) {
+        stopLoginPoll();
+        try {
+          await invoke("login.logout", { source });
+        } catch (error) {
+          showError("auth-error", String(error.message || error));
+        }
+        $("login-box").classList.add("hide");
+        await loadAll(true);
+      }
+
+      // Delegated: the source list is re-rendered on every load.
+      $("sources").addEventListener("click", (event) => {
+        const loginBtn = event.target.closest("[data-login]");
+        if (loginBtn) { startLogin(loginBtn.dataset.login); return; }
+        const logoutBtn = event.target.closest("[data-logout]");
+        if (logoutBtn) { logout(logoutBtn.dataset.logout); }
       });
 
       // ---- boot ------------------------------------------------------------

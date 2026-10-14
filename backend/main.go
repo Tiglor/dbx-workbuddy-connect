@@ -43,6 +43,11 @@ type plugin struct {
 	catalog *catalogCache
 	bridge  *bridgeServer
 
+	// qoder drives the device-authorization login flow for the Qoder source.
+	qoder *qoderAuth
+	// trae drives the loopback OAuth login flow for the Trae source.
+	trae *traeAuth
+
 	mutex sync.Mutex
 }
 
@@ -50,15 +55,21 @@ type plugin struct {
 func newPlugin(dataDir string) *plugin {
 	client := newUpstreamClient()
 	store := newCredentialStore(client, dataDir)
+	qoder := newQoderAuth(dataDir)
+	trae := newTraeAuth(dataDir)
 	return &plugin{
 		client: client,
 		store:  store,
-		// WorkBuddy is the only source with a usable credential today; Qoder and
-		// Trae are catalog-only and refuse chat with an explanation.
+		qoder:  qoder,
+		trae:   trae,
+		// WorkBuddy reads a desktop credential; Qoder and Trae proxy chat after
+		// the user signs in from the workbench; Doubao's session cookie is
+		// readable but its chat path stays refused (signing layer unsolved).
 		sources: []modelSource{
 			newWorkBuddySource(client, store),
-			newQoderSource(),
-			newTraeSource(),
+			newQoderSource(qoder),
+			newTraeSource(trae),
+			newDoubaoSource(),
 		},
 		// Short enough that a sign-in or an app install shows up promptly, long
 		// enough to collapse the several reads one workbench load performs.
@@ -112,8 +123,113 @@ func (p *plugin) Handle(
 	case "diagnostics":
 		return p.diagnostics(ctx), nil
 
+	case "login.start":
+		return p.loginStart(ctx, values)
+
+	case "login.poll":
+		return p.loginPoll(ctx, values)
+
+	case "login.logout":
+		return p.loginLogout(ctx, values)
+
 	default:
 		return nil, dbxpluginsdk.MethodNotFound(method)
+	}
+}
+
+// loginStart begins the sign-in flow for one source and returns what the
+// workbench needs to drive it: for an OAuth device flow that is the approval
+// URL plus the state token to poll with.
+func (p *plugin) loginStart(ctx context.Context, values map[string]any) (any, *dbxpluginsdk.PluginError) {
+	source, _ := values["source"].(string)
+	switch source {
+	case qoderSourceID:
+		authURL, state, err := p.qoder.StartLogin()
+		if err != nil {
+			return nil, dbxpluginsdk.NewError(-32603, err.Error())
+		}
+		return map[string]any{
+			"source":  qoderSourceID,
+			"kind":    "device",
+			"authUrl": authURL,
+			"state":   state,
+		}, nil
+	case traeSourceID:
+		authURL, state, err := p.trae.StartLogin()
+		if err != nil {
+			return nil, dbxpluginsdk.NewError(-32603, err.Error())
+		}
+		return map[string]any{
+			"source":  traeSourceID,
+			"kind":    "oauth",
+			"authUrl": authURL,
+			"state":   state,
+		}, nil
+	default:
+		return nil, dbxpluginsdk.NewError(-32602, "login is not supported for source "+source)
+	}
+}
+
+// loginPoll performs one poll of an in-flight login. It reports pending while
+// the user has not approved, done once a credential is stored.
+func (p *plugin) loginPoll(ctx context.Context, values map[string]any) (any, *dbxpluginsdk.PluginError) {
+	source, _ := values["source"].(string)
+	state, _ := values["state"].(string)
+	switch source {
+	case qoderSourceID:
+		cred, pending, err := p.qoder.PollLogin(ctx, state)
+		if err != nil {
+			return nil, dbxpluginsdk.NewError(-32603, err.Error())
+		}
+		if pending {
+			return map[string]any{"source": qoderSourceID, "pending": true}, nil
+		}
+		// A fresh sign-in changes what the catalog can read.
+		p.catalog.invalidate()
+		return map[string]any{
+			"source":  qoderSourceID,
+			"pending": false,
+			"uid":     cred.UID,
+			"region":  cred.Region,
+		}, nil
+	case traeSourceID:
+		cred, pending, err := p.trae.PollLogin(ctx, state)
+		if err != nil {
+			return nil, dbxpluginsdk.NewError(-32603, err.Error())
+		}
+		if pending {
+			return map[string]any{"source": traeSourceID, "pending": true}, nil
+		}
+		p.catalog.invalidate()
+		return map[string]any{
+			"source":   traeSourceID,
+			"pending":  false,
+			"uid":      cred.UID,
+			"nickname": cred.Nickname,
+		}, nil
+	default:
+		return nil, dbxpluginsdk.NewError(-32602, "login is not supported for source "+source)
+	}
+}
+
+// loginLogout clears a stored credential for one source.
+func (p *plugin) loginLogout(ctx context.Context, values map[string]any) (any, *dbxpluginsdk.PluginError) {
+	source, _ := values["source"].(string)
+	switch source {
+	case qoderSourceID:
+		if err := p.qoder.Logout(); err != nil {
+			return nil, dbxpluginsdk.NewError(-32603, err.Error())
+		}
+		p.catalog.invalidate()
+		return map[string]any{"source": qoderSourceID, "ok": true}, nil
+	case traeSourceID:
+		if err := p.trae.Logout(); err != nil {
+			return nil, dbxpluginsdk.NewError(-32603, err.Error())
+		}
+		p.catalog.invalidate()
+		return map[string]any{"source": traeSourceID, "ok": true}, nil
+	default:
+		return nil, dbxpluginsdk.NewError(-32602, "logout is not supported for source "+source)
 	}
 }
 
