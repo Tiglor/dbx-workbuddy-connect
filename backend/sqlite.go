@@ -24,6 +24,23 @@ const queryTimeout = 8 * time.Second
 // never write to, lock, or migrate another application's database.
 func querySQLite(path string, query string, args ...any) ([][]string, error) {
 	dsn := fmt.Sprintf("file:%s?mode=ro&_pragma=query_only(1)&_pragma=busy_timeout(2000)", path)
+	return queryDSN(dsn, query, args...)
+}
+
+// querySQLiteImmutable opens the database with immutable=1, which tells SQLite
+// the file will not change and lets it skip the WAL/-shm handshake. Some
+// Chromium stores (Doubao's cookie DB) are WAL-mode and held by a running app,
+// so a plain read-only open fails with SQLITE_CANTOPEN; immutable reads through
+// that. It is a fallback only: a concurrent writer could expose a torn page, so
+// callers use it just for best-effort identity reads, never for anything that
+// must be transactionally consistent.
+func querySQLiteImmutable(path string, query string, args ...any) ([][]string, error) {
+	dsn := fmt.Sprintf("file:%s?immutable=1&_pragma=query_only(1)", path)
+	return queryDSN(dsn, query, args...)
+}
+
+// queryDSN runs a read-only query against an already-formed SQLite DSN.
+func queryDSN(dsn string, query string, args ...any) ([][]string, error) {
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
